@@ -1,11 +1,27 @@
-# Name Template Exercise 
+# Named Template Exercise 
 
-## Prerequisites range-example 
+##  
 
-  * helm-exercises/range chart exists 
+## Step 0: create project 
+
+```
+cd
+mkdir -p helm-exercises 
+cd helm-exercises
+helm create range 
+cd range
+```
 
 
 ## Step 1: Put in file starting _helpers.tpl 
+
+```
+cd templates
+rm -fR *.yaml 
+nano _helpers.tpl
+```
+
+  * Das am Ende einfügen -> 
 
 ```
 {{/* Definiere ein named template namens "mychart.containerPort" */}}
@@ -73,7 +89,7 @@ spec:
         - name: web
           image: "nginx:latest"
           ports:
-            {{ include "range.containerPort" . | nindent 12 }}
+            {{- include "range.containerPort" . | nindent 12 }}
 ```
 
 ```
