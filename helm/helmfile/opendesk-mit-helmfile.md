@@ -175,14 +175,34 @@ Required-Affinity wieder neben dem Primary einordnet.
 kubectl -n opendesk delete pod ums-ldap-notifier-0
 ```
 
-**Verdacht:** Ein Kubernetes-cgroup-v2-Verhalten (`memory.oom.group`, seit K8s 1.28 aktiv;
-Kubelet-Flag `singleProcessOOMKill` seit 1.32 verfuegbar, Default aber weiterhin "ganzen
-Container killen") in Kombination mit LMDB's memory-mapped I/O kann bei kurzen Speicherspitzen
-zu vorzeitigen Kills fuehren - dagegen spricht aber das kontinuierliche (nicht abflachende)
-Wachstum bis 40GB. Da DOKS als Managed-Service das Kubelet nicht konfigurierbar macht, laesst
-sich das auf DOKS nicht gegentesten. Naechster Schritt: Reproduktion auf einem selbstverwalteten
-kubeadm-Cluster (der von openDesk selbst getestete, kubespray-basierte Weg), wo
-`singleProcessOOMKill: true` gesetzt werden kann. **Stand jetzt: ungeloest.**
+**Geloest.** Ursache war ein Kubernetes-cgroup-v2-Verhalten: `memory.oom.group` (seit K8s 1.28
+aktiv) killt bei cgroup v2 den **kompletten Container**, sobald irgendein einzelner Prozess
+darin kurzzeitig OOM geht - auch bei einer voellig harmlosen, transienten Speicherspitze, wie
+sie LMDB (das Speicherformat von OpenLDAP) beim Start durch memory-mapped I/O erzeugt. Seit
+K8s 1.32 gibt es das Kubelet-Flag `singleProcessOOMKill`, das genau das verhindert (nur der
+einzelne Prozess wird gekillt, nicht der ganze Container) - Default ist aber weiterhin "aus"
+fuer cgroup v2.
+
+Da DOKS als Managed-Service keine Kubelet-Konfiguration erlaubt, war das dort nicht loesbar.
+Auf einem selbstverwalteten kubeadm-Cluster (3 Droplets, Kubernetes 1.32.13, `kubeadm init`
+mit einer `KubeletConfiguration` inkl. `singleProcessOOMKill: true`) lief `ums-ldap-server-primary`
+sofort stabil: tatsaechlicher Speicherbedarf liegt bei ~86 MB (!) statt der zuvor gemessenen 40GB+.
+Bestaetigt der urspruenglichen Vermutung: der "hohe Speicherbedarf" war nie real, sondern ein
+Kill-Artefakt der cgroup-v2-Policy.
+
+```
+# kubeadm-config.yaml (Auszug) - vor "kubeadm init" setzen, gilt dann automatisch
+# fuer alle spaeter beitretenden Nodes (aus der kubelet-config ConfigMap)
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+singleProcessOOMKill: true
+```
+
+**Praktische Konsequenz:** Fuer openDesk (bzw. jeden anderen LMDB/mmap-lastigen Workload) auf
+Kubernetes >= 1.28 mit cgroup v2 ist ein Managed-Kubernetes-Anbieter, der keine Kubelet-Config
+erlaubt (wie DOKS), ungeeignet - zumindest ohne diesen Fix upstream im Chart/Image. Alternativen:
+selbstverwalteter Cluster (kubeadm/kubespray, wie hier), oder ein Managed-Angebot, das
+Kubelet-Extra-Args/-Config zulaesst.
 
 ### Geloeschte PVCs haengen in `Terminating`
 
@@ -200,14 +220,20 @@ kubectl delete volumeattachment <name>
 
 Ein Helmfile-Deployment dieser Groessenordnung (35+ Charts, SSO/LDAP/Datenbanken) ist deutlich
 komplexer als ein einzelnes `helm install` und bringt eigene Fehlerklassen mit sich: Job-Hook-
-State bei Retries, Cross-Pod-Volume-Affinity, und - wie hier beobachtet - ein bislang ungeloestes
-Speicherproblem im LDAP-Server, das sich nicht durch simples Hochsetzen von Limits loesen laesst.
+State bei Retries, Cross-Pod-Volume-Affinity und - am aufwendigsten zu diagnostizieren -
+Kubernetes-Plattform-Verhalten (cgroup v2 OOM-Handling), das mit bestimmten Workloads
+(memory-mapped I/O wie LMDB) kollidiert.
 
 Auf einem DigitalOcean-Managed-Kubernetes-Cluster (DOKS) blieb der LDAP-Server trotz umfangreicher
-Diagnose (Ressourcen, PVCs, Node-Affinity, Chart-Versionen) instabil. Da openDesk selbst gegen
-selbstverwaltete kubespray-Cluster getestet wird und DOKS als Managed-Service keinen Zugriff auf
-Kubelet-Konfiguration erlaubt, ist der naechste Schritt ein eigener kubeadm-Cluster auf Droplets -
-siehe Fortsetzung (falls vorhanden) oder Commit-History dieses Dokuments.
+Diagnose (Ressourcen, PVCs, Node-Affinity, Chart-Versionen) instabil, weil DOKS als Managed-Service
+keinen Zugriff auf die Kubelet-Konfiguration erlaubt. Der Wechsel auf einen selbstverwalteten
+kubeadm-Cluster (3 Droplets, `singleProcessOOMKill: true`) - genau der Weg, gegen den openDesk
+selbst testet (kubespray-basiert) - hat das Problem sofort behoben.
 
-Fuer ein Trainings-Lab ohne diesen Anspruch lohnt sich ggf. der Blick auf die leichtgewichtigeren
-Alternativen (K3s-Guide, SCS-Dokumentation von openDesk).
+**Praxis-Lehre:** Bei mysterioesen OOM-Kills mit scheinbar absurd hohem, nicht plateauendem
+Speicherbedarf lohnt sich der Blick auf die cgroup-v2-OOM-Policy des Clusters, bevor man Limits
+immer weiter hochdreht - insbesondere bei Workloads mit memory-mapped I/O (LMDB, RocksDB, u.ae.)
+und auf Managed-Kubernetes-Angeboten ohne Kubelet-Zugriff.
+
+Fuer ein Trainings-Lab ohne diesen Anspruch lohnt sich ggf. trotzdem der Blick auf die
+leichtgewichtigeren Alternativen (K3s-Guide, SCS-Dokumentation von openDesk).
