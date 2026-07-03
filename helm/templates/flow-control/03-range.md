@@ -9,11 +9,14 @@ cd helm-exercises
 helm create range
 cd range/templates
 rm -f *.yaml
+cd ..
+nano values.yaml 
 ```
 
-## Step 1: Values.yaml 
+## Step 1: values.yaml 
 
 ```
+# unten mit ran schreiben 
 favorite:
   drink: coffee
   food: pizza
