@@ -2,6 +2,10 @@
 
 ## Agenda 
 
+  1. Kubernetes
+     * [Architektur Kubernetes](/kubernetes/architecture.md)
+     * [Aufbau von Browser zu Applikation - Schaubild](kubernetes/konzepte/anatomie-einer-applikation.md)
+
   1. Helm Einfuehrung 
      * [Was ist helm ?](einfuehrung/was-ist-helm.md)
      * [Was kann helm ?](einfuehrung/was-kann-helm.md)
