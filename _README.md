@@ -2,6 +2,10 @@
 
 
 ## Agenda
+  1. Kubernetes
+     * [Architektur Kubernetes](#architektur-kubernetes)
+     * [Aufbau von Browser zu Applikation - Schaubild](#aufbau-von-browser-zu-applikation---schaubild)
+
   1. Helm Einfuehrung 
      * [Was ist helm ?](#was-ist-helm-)
      * [Was kann helm ?](#was-kann-helm-)
@@ -23,7 +27,7 @@
      * [Wichtig: Helm Spickzettel](#wichtig-helm-spickzettel)
 
   1. Arbeiten mit helm - charts
-     * [Installation, Upgrade, Uninstall helm-Chart exercise](#installation-upgrade-uninstall-helm-chart-exercise)
+     * [Installation, Upgrade, Uninstall helm-Chart exercise - simple (mariadb-cloudpirates)](#installation-upgrade-uninstall-helm-chart-exercise---simple-mariadb-cloudpirates)
      * [Nur fertiges manifest ausgeben ohne Installation](#nur-fertiges-manifest-ausgeben-ohne-installation)
      * [Informationen aus nicht installierten Helm-Charts bekommen](#informationen-aus-nicht-installierten-helm-charts-bekommen)
      * [Chart runterladen und evtl. entpacken und bestimmte Version](#chart-runterladen-und-evtl-entpacken-und-bestimmte-version)
@@ -53,7 +57,10 @@
 
   1. Metrics - Server
      * [Metrics - Server mit helm installieren und verwenden](#metrics---server-mit-helm-installieren-und-verwenden)
-    
+
+  1. Helmfile
+     * [Praxisbeispiel: openDesk mit Helmfile ausrollen](#praxisbeispiel-opendesk-mit-helmfile-ausrollen)
+
   1. helm - Dokumentation
      * [Helm Documentation](https://helm.sh/docs/)
 
@@ -113,6 +120,96 @@
      * [helm template --validate - gegen api-server testen](#helm-template---validate---gegen-api-server-testen)
 
 <div class="page-break"></div>
+
+## Kubernetes
+
+### Architektur Kubernetes
+
+
+### Schaubild 
+
+![image](https://github.com/user-attachments/assets/f4de7c54-33a8-46e5-916c-1119575b1aed)
+
+### Komponenten / Grundbegriffe
+
+#### Master (Control Plane)
+
+##### Aufgaben 
+
+  * Der Master koordiniert den Cluster
+  * Der Master koordiniert alle Aktivitäten in Ihrem Cluster
+    * Planen von Anwendungen
+    * Verwalten des gewünschten Status der Anwendungen
+    * Skalieren von Anwendungen
+    * Rollout neuer Updates.
+
+##### Komponenten des Masters 
+
+###### etcd
+
+  * Verwalten der Konfiguration des Clusters (key/value - pairs) 
+  
+###### kube-controller-manager  
+  
+  * Zuständig für die Überwachung der Stati im Cluster mit Hilfe von endlos loops. 
+  * kommuniziert mit dem Cluster über die kubernetes-api (bereitgestellt vom kube-api-server)
+
+###### kube-api-server 
+
+  * provides api-frontend for administration (no gui)
+  * Exposes an HTTP API (users, parts of the cluster and external components communicate with it)
+  * REST API
+ 
+###### kube-scheduler 
+
+  * assigns Pods to Nodes. 
+  * scheduler determines which Nodes are valid placements for each Pod in the scheduling queue 
+    ( according to constraints and available resources )
+  * The scheduler then ranks each valid Node and binds the Pod to a suitable Node. 
+  * Reference implementation (other schedulers can be used)
+ 
+#### Nodes  
+
+  * Nodes (Knoten) sind die Arbeiter (Maschinen), die Anwendungen ausführen
+  * Ref: https://kubernetes.io/de/docs/concepts/architecture/nodes/
+
+#### Pod/Pods 
+
+  * Pods sind die kleinsten einsetzbaren Einheiten, die in Kubernetes erstellt und verwaltet werden können.
+  * Ein Pod (übersetzt Gruppe) ist eine Gruppe von einem oder mehreren Containern
+    * gemeinsam genutzter Speicher- und Netzwerkressourcen   
+    * Befinden sich immer auf dem gleich virtuellen Server 
+    
+### Control Plane Node (former: master) - components 
+
+### Node (Minion) - components 
+
+#### General 
+
+  * On the nodes we will rollout the applications
+
+#### kubelet
+
+```
+Node Agent that runs on every node (worker) 
+Er stellt sicher, dass Container in einem Pod ausgeführt werden.
+```
+
+#### Kube-proxy 
+
+  * Läuft auf jedem Node 
+  * = Netzwerk-Proxy für die Kubernetes-Netzwerk-Services.
+  * Kube-proxy verwaltet die Netzwerkkommunikation innerhalb oder außerhalb Ihres Clusters.
+  
+### Referenzen 
+
+  * https://www.redhat.com/de/topics/containers/kubernetes-architecture
+
+
+### Aufbau von Browser zu Applikation - Schaubild
+
+
+![image](https://github.com/user-attachments/assets/0f2086fd-2265-4a01-9bdc-09955c4b8e74)
 
 ## Helm Einfuehrung 
 
@@ -220,7 +317,7 @@ sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
 ```
 cd
-mkdir .kube
+mkdir -p .kube
 cd .kube
 cp -a /tmp/config config
 ls -la
@@ -338,45 +435,44 @@ helm template bitnami/nginx
 
 ## Arbeiten mit helm - charts
 
-### Installation, Upgrade, Uninstall helm-Chart exercise
+### Installation, Upgrade, Uninstall helm-Chart exercise - simple (mariadb-cloudpirates)
 
 
-### Install 
-
-```
-helm repo add bitnami https://charts.bitnami.com/bitnami
-```
+### Schritt 1: install mariadb von cloudpirates  
 
 ```
-## Installiert 
-helm install my-nginx bitnami/nginx --version 19.0.4 --create-namespace --namespace app-<namenskuerzel>
-## Zeigt an, was er ausrollen würde 
-helm install my-nginx bitnami/nginx --version 19.0.4 --dry-run # auch für uninstall, upgrade 
+## Mini-Step 1: Testen 
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.5.1 --dry-run=server
 ```
 
 ```
-## noch besser
-## Installiert 
-helm upgrade --install my-nginx bitnami/nginx --version 19.0.4 --create-namespace --namespace app-<namenskuerzel>
+## Mini-Step 2: Installieren 
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.5.1 
 ```
 
 ```
-## überprüfen // laufen die pods 
-kubectl -n app-<namenskuerzel> get all 
+## Geht das denn auch ?
+kubectl get pods
 ```
 
-### Exercise: Upgrade to new version 
+
+### Schritt 2: Exercise: Upgrade to new version 
+
+#### Schritt 2.1 Default values (auf terminal) ausfindig machen 
 
 ```
-## Recherche wie die Werte gesetzt werden (artifacthub.io) oder
-helm show values bitnami/nginx
-helm show values bitnami/nginx | less
+## Recherchiere wie die Werte gesetzt werden (artifacthub.io) oder verwende die folgenden Befehle:
+helm show values oci://registry-1.docker.io/cloudpirates/mariadb
+helm show values oci://registry-1.docker.io/cloudpirates/mariadb | less
 ```
+
+#### Schritt 2.2 Upgrade und resources ändern 
+
 
 ```
 cd 
-mkdir -p nginx-values 
-cd nginx-values
+mkdir -p mariadb-values 
+cd mariadb-values
 mkdir prod
 cd prod
 ```
@@ -387,34 +483,141 @@ nano values.yaml
 
 ```
 resources:
-   requests:
-     cpu: 0.1
-     memory: 150Mi
-   limits:
-     cpu: 0.1
-     memory: 150Mi
+  limits:
+     memory: 300Mi
+  requests:
+     memory: 300Mi
+     cpu: 100m
 ```
 
 ```
 cd ..
-helm upgrade --install my-nginx bitnami/nginx --create-namespace --namespace app-<nameskuerzel> -f prod/values.yaml  
+```
+
+```
+## Testen 
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.5.3 --dry-run -f prod/values.yaml  
+```
+
+```
+## Real Upgrade
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.5.3 -f prod/values.yaml
+```
+
+```
+kubectl get pods
 ```
 
 #### Umschauen 
 
 ```
-kubectl -n app-<namenskuerzel> get pods
-helm -n app-<namenskuerzel> status my-nginx 
-helm -n app-<namenskuerzel> list
+kubectl get pods
+## Ab Version 4 (helm) sinnvoll
+helm status my-mariadb 
+helm list
 ## alle helm charts anzeigen, die im gesamten Cluster installierst wurden 
-helm -n app-<namenskuerzel> list -A
-helm -n app-<namenskuerzel> history my-nginx 
+helm list -A
+helm history my-mariadb 
 ```
+
+#### Umschauen get 
+
+```
+## Wo speichert er Information, die er später mit helm get abruft
+kubectl get secrets
+```
+
+
+```
+helm get values my-mariadb
+helm get manifest my-mariadb
+## Zeile ausgeben und 4 Zeilen danach und 4 Zeilen davor
+helm get manifest my-mariadb | grep "300Mi" -A4 -B4 
+## alles was ich ausgeben kann an Daten aus secrets .
+helm get all my-mariadb 
+```
+
+```
+## Hack COMPUTED VALUES anzeigen lassen
+## Welche Werte (values) hat er zur Installation verwendet
+helm get all my-mariadb | grep -i computed -A 200
+## besser Variante von David
+helm get all my-mariadb | sed -n '/COMPUTED/, /HOOKS/p'
+
+```
+
+### Tipp: values aus alter revision anzeigen 
+
+```
+## Beispiel: 
+helm get values  my-mariadb --revision 1
+```
+
+### Schritt 3: Exercise: Upgrade to new version 
+
+
+#### Schritt 3.1. Upgrade und resources beibehalten 
+
+  * Values wurden bereits im vorherigen Schritt angelegt 
+
+```
+## Testen 
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.10.1 --dry-run=server -f prod/values.yaml  
+```
+
+```
+## Real Upgrade
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.10.1 -f prod/values.yaml
+```
+
+```
+kubectl get pods
+## kein neuer pod
+```
+
+#### Schritt 3.2 Fehlgeschlagene Installation, wie lösen ? 
+
+```
+## Schlägt fehle, weil mit dem upgrade bestimmte Felder nicht überschrieben dürfen, die geändert wurden im Template
+```
+
+#### Lösung 
+
+  * Deinstallieren (pvc bleibt erhalten auch beim Deinstallieren -> so macht das helm)
+  * Und wieder installieren in der neuen Version 
+
+```
+## Frage, ist das pvc noch ?
+kubectl get pvc
+## Ja ! 
+```
+
+<img width="891" height="82" alt="image" src="https://github.com/user-attachments/assets/849b5859-a5f2-40df-8bc6-018eaedbd146" />
+
+```
+## alte revisions behalten 
+helm uninstall my-mariadb --keep-history
+kubectl get pvc 
+## auch nach der Deinstallation ist der pvc noch da
+## Super !! 
+```
+
+```
+## Real Upgrade
+helm upgrade --install my-mariadb oci://registry-1.docker.io/cloudpirates/mariadb --reset-values --version 0.10.1 -f prod/values.yaml
+```
+
+```
+kubectl get pods
+helm get values my-mariadb 
+```
+
+
 
 #### Uninstall 
 
 ```
-helm -n app-<namenskuerzel> uninstall my-nginx 
+helm uninstall my-mariadb 
 ## namespace wird nicht gelöscht
 ## händisch löschen
 kubectl delete ns app-<namenskuerzel>
@@ -1029,20 +1232,24 @@ data:
 ### Helm mit gitlab ci/cd ausrollen
 
 
-### Step 1: Create gitlab - repo and pipeline 
+### Step 1: Import gitlab - repo and pipeline 
 
 ```
-1. Create new repo on gitlab 
-2. Click on pipeline Editor and creat .gitlab-ci.yml with Button 
+1. Create new repo on gitlab -> do import
+https://gitlab.com/jmetzger/training-helm-chart-kubernetes-gitlab-ci-cd.git
+ 
 
 ```
 
-### Step 2: Push your helm chart files to repo 
+### Step 2: in .gitlab-ci.yaml
 
+```
+von ---_>
+APP_NAME: my-first-app
 
-   * Now looks like this
-
-![image](https://github.com/user-attachments/assets/5e88593b-5b31-4adf-a2bb-e5e9a5129be5)
+in ----->
+APP_NAME: my-first-app<namenskuerzel>
+```
 
 ### Step 3: Add your KUBECONFIG as Variable (type: File) to Variables 
 
@@ -1062,7 +1269,26 @@ variables:
 deploy:
   stage: deploy
   image: 
-    name: alpine/helm:3.2.1
+    name: alpine/stages:          # List of stages for jobs, and their order of execution
+  - deploy
+
+variables:
+  APP_NAME: my-first-app
+
+deploy:
+  stage: deploy
+  image: 
+    name: alpine/k8s:1.31.13
+## Important to unset entrypoint 
+    entrypoint: [""]
+  script:
+    - ls -la
+    - cd; mkdir .kube; cd .kube; cat $KUBECONFIG_SECRET > config; ls -la;
+    - cd $CI_PROJECT_DIR; helm upgrade ${APP_NAME} ./charts/my-app --install --namespace ${APP_NAME} --create-namespace -f ./config/values.yaml
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: always
+
 ## Important to unset entrypoint 
     entrypoint: [""]
   script:
@@ -1106,6 +1332,268 @@ kubectl top pods
 kubectl top pods -A
 kubectl top nodes
 ```
+
+## Helmfile
+
+### Praxisbeispiel: openDesk mit Helmfile ausrollen
+
+
+### Hintergrund
+
+openDesk (ZenDiS/BMI) ist kein einzelnes Helm-Chart, sondern 35+ Charts (Keycloak/Nubus als IAM,
+Nextcloud, OX App Suite, OpenProject, XWiki, Element/Synapse, Jitsi, Collabora, CryptPad,
+Mailstack, Datenbanken, ...), orchestriert ueber [Helmfile](https://helmfile.readthedocs.io/).
+Kein `helm install opendesk` - stattdessen `helmfile apply -e <environment> -n <namespace>`.
+
+Dieses Dokument beschreibt den Rollout auf DigitalOcean als Referenz fuer aehnliche
+Helmfile-basierte Multi-Chart-Deployments. **Ergebnis vorweg:** Auf einem Managed-Cluster (DOKS)
+blieb der LDAP-Server (siehe Troubleshooting) instabil - der erfolgreiche, stabile Rollout lief
+am Ende auf einem selbstverwalteten 3-Node-kubeadm-Cluster (Kubernetes 1.32.13 auf Ubuntu-24.04-
+Droplets). Grund und Fix sind unten dokumentiert.
+
+### Voraussetzungen
+
+| Tool | Version | Hinweis |
+|---|---|---|
+| Kubernetes | >= 1.24, CNCF-zertifiziert | getestet mit 1.35.5 (DOKS, LDAP instabil) und 1.32.13 (kubeadm, stabil - siehe Troubleshooting) |
+| Helm | >= 3.17.3, NICHT 3.18.0 / 3.20.1 | bekannte Helm-Bugs in diesen Versionen |
+| Helmfile | >= 1.0.0 | |
+| Helm Diff Plugin | >= 3.11.0 | `helm plugin install` |
+| yq | >= 4.52.4 | |
+| Ingress Controller | haproxy-ingress.github.io (Default seit openDesk >= 1.13) | ingress-nginx geht technisch auch (Override noetig), ist aber upstream deprecated und nicht mehr der getestete Pfad |
+| cert-manager | mit CRDs | fuer Zertifikate |
+| Volume Provisioner | ReadWriteOnce (min.) | z.B. `do-block-storage` |
+
+Hardware-Minimum laut openDesk-Doku fuer eine Eval-Instanz: 12 CPU-Cores, 32 GB RAM.
+In der Praxis (siehe Troubleshooting unten) sollte man deutlich mehr RAM einplanen.
+
+### Ablauf
+
+#### Schritt 1: Ingress-Controller und cert-manager installieren
+
+openDesk >= v1.13 verwendet standardmaessig `ingressClassName: haproxy` - das sollte man auch so
+lassen, nicht auf ingress-nginx umsteigen. Ingress-nginx laesst sich zwar technisch per Override
+anbinden (Erfahrung aus der Praxis: DNS, Zertifikate und Routing funktionieren grundsaetzlich
+auch damit), es ist aber upstream deprecated und **nicht der von openDesk getestete Pfad** - man
+weicht damit unnoetig vom Standard-Setup ab, ohne einen echten Vorteil zu haben.
+
+```
+helm repo add haproxy-ingress https://haproxy-ingress.github.io/charts
+helm upgrade -i haproxy-ingress haproxy-ingress/haproxy-ingress \
+  -n haproxy-ingress --create-namespace \
+  --set controller.ingressClass=haproxy \
+  --set controller.ingressClassResource.enabled=true \
+  --set controller.ingressClassResource.default=true \
+  --set controller.config.config-global="tune.bufsize 65536\ntune.http.maxhdr 256"
+```
+
+```
+helm repo add jetstack https://charts.jetstack.io
+helm upgrade -i cert-manager jetstack/cert-manager \
+  -n cert-manager --create-namespace --set crds.enabled=true
+```
+
+Danach einen `ClusterIssuer` fuer Let's Encrypt anlegen (HTTP-01, passend zur Ingress-Klasse):
+
+```
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: <deine-email>
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: haproxy
+```
+
+#### Schritt 2: DNS
+
+openDesk braucht ein Wildcard-DNS auf die Ingress-LoadBalancer-IP - jede Komponente bekommt eine
+eigene Subdomain (z.B. `office.<domain>`, `id.<domain>`, `pad.<domain>`).
+
+```
+## LoadBalancer-IP ermitteln
+kubectl -n haproxy-ingress get svc haproxy-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+```
+
+DNS-Eintraege: `<domain>` und `*.<domain>` als A-Record auf diese IP.
+
+#### Schritt 3: Repo klonen und konfigurieren
+
+```
+git clone https://gitlab.opencode.de/bmi/opendesk/deployment/opendesk.git
+cd opendesk
+git checkout v1.16.1
+```
+
+Eigene Einstellungen kommen als `.yaml.gotmpl`-Dateien in `helmfile/environments/dev/` (nicht
+die Default-Dateien in `helmfile/environments/default/` anfassen) - z.B. fuer
+Ressourcen-Anpassungen (siehe Troubleshooting). Der Ingress muss dafuer nicht angefasst werden,
+da `haproxy` bereits Default ist.
+
+#### Schritt 4: Deployen
+
+```
+export DOMAIN=meine-domain.de
+export MASTER_PASSWORD=<sicheres-passwort-per-openssl-rand-generiert>
+
+helmfile apply -e dev -n opendesk
+```
+
+`MASTER_PASSWORD` ist Pflicht (kein Default mehr seit v1.14) und wird intern per
+`derivePassword` fuer alle Sub-Secrets (Datenbanken, LDAP, OX AppSuite, ...) verwendet - ein
+Passwort reicht fuer die komplette Eval-Instanz.
+
+**Sicherheitshinweis:** `MASTER_PASSWORD` niemals im Klartext in Chat/Terminal-History landen
+lassen - per `openssl rand` generieren, SOPS-verschluesselt ablegen (`.env.enc`), zur Laufzeit
+per `sops --decrypt` in eine Shell-Variable einlesen.
+
+#### Schritt 5: Default-User importieren
+
+Ueber die UDM-REST-API mittels Docker-Container:
+
+```
+docker run --rm registry.opencode.de/bmi/opendesk/components/platform-development/images/user-import:3.0.0 \
+  ./user_import_udm_rest_api.py \
+  --import_domain ${DOMAIN} \
+  --udm_api_password ${MASTER_PASSWORD} \
+  --set_default_password <user-pw> \
+  --import_filename template.ods \
+  --create_admin_accounts True
+```
+
+### Troubleshooting (Praxis-Erfahrungen)
+
+#### `helm upgrade` schlaegt fehl mit `jobs.batch "<name>-N" not found`
+
+Trat bei `opendesk-migrations-pre` und `opendesk-nextcloud-management` auf, wenn `helmfile apply`
+nach einem Fehler erneut ausgefuehrt wird. Ursache: die ConfigMap `migrations-status` im
+Ziel-Namespace haelt den Migrations-Status fest und verwirrt den Job-Hook bei einem Retry
+("Current Stage PRE is the same as PRE - this is suspicious").
+
+Fix: ConfigMap loeschen und erneut `helmfile apply` ausfuehren.
+
+```
+kubectl -n opendesk delete configmap migrations-status
+```
+
+#### `ums-ldap-server-primary` crasht mit OOMKilled (ungeloest auf DOKS)
+
+Der Nubus-LDAP-Server (Univention-basiert, Chart `nubus`) kann beim Start extrem viel Speicher
+allozieren - in einem Test: Wachstum von ~100MB auf ueber 11 GB in unter 3 Sekunden, live per
+`kubectl exec ... cat /sys/fs/cgroup/memory.current` verfolgt. Der Standard-Wert des Charts
+(`nubusDevelopmentResources`) liegt bei nur 1Gi Limit; Univention selbst nennt fuer Produktion
+2048Mi als Default - der Hersteller geht also nicht von einem hohen Speicherbedarf aus.
+
+Folgende Ursachen wurden systematisch ausgeschlossen:
+
+- **Zu wenig RAM:** Getestet mit Limits von 1Gi bis 40Gi (dedizierter `m-8vcpu-64gb`-Node) - das
+  Wachstum floppt bei keiner Grenze ab, sondern waechst kontinuierlich weiter (live gemessen:
+  24GB -> 38GB in ~30 Sekunden), bis es die jeweilige Grenze erreicht und gekillt wird. Kein
+  einmaliger Init-Peak, der irgendwann plateaut.
+- **Alte/korrupte Daten:** Frische, leere PVCs (nach komplettem `helm uninstall` inkl.
+  PVC-Loeschung) zeigen dasselbe Verhalten. Die eigentlichen LDAP-Datenverzeichnisse
+  (`/var/lib/univention-ldap/ldap/`) blieben ueber alle Versuche hinweg leer, der Translog wuchs
+  nie ueber 32KB - das Problem haengt nicht von angesammeltem Datenvolumen ab.
+- **Chart-/openDesk-Versions-Regression:** Mit openDesk v1.16.1 (nubus 1.20.1) UND v1.14.3
+  (nubus 1.19.1) reproduziert - identisches Verhalten in zwei unabhaengigen Versionskombinationen.
+
+Ein echter (und notwendiger) Bug wurde nebenbei trotzdem gefunden: `ums-ldap-notifier` und
+`ums-ldap-server-primary` teilen sich ein RWO-Volume und muessen daher zwingend auf demselben
+Node laufen (der Chart definiert dafuer eine `podAffinity`). Wird der `ldap-server-primary`-Pod
+manuell neu gestartet (z.B. `kubectl delete pod`), kann der Scheduler ihn auf einen anderen Node
+setzen als den Notifier -> `Multi-Attach error for volume ... already used by pod(s)
+ums-ldap-notifier-0`. Fix: betroffenen Notifier-Pod ebenfalls loeschen, damit er sich per
+Required-Affinity wieder neben dem Primary einordnet.
+
+```
+kubectl -n opendesk delete pod ums-ldap-notifier-0
+```
+
+**Geloest.** Ursache war ein Kubernetes-cgroup-v2-Verhalten: `memory.oom.group` (seit K8s 1.28
+aktiv) killt bei cgroup v2 den **kompletten Container**, sobald irgendein einzelner Prozess
+darin kurzzeitig OOM geht - auch bei einer voellig harmlosen, transienten Speicherspitze, wie
+sie LMDB (das Speicherformat von OpenLDAP) beim Start durch memory-mapped I/O erzeugt. Seit
+K8s 1.32 gibt es das Kubelet-Flag `singleProcessOOMKill`, das genau das verhindert (nur der
+einzelne Prozess wird gekillt, nicht der ganze Container) - Default ist aber weiterhin "aus"
+fuer cgroup v2.
+
+Da DOKS als Managed-Service keine Kubelet-Konfiguration erlaubt, war das dort nicht loesbar.
+Auf einem selbstverwalteten kubeadm-Cluster (3 Droplets, Kubernetes 1.32.13, `kubeadm init`
+mit einer `KubeletConfiguration` inkl. `singleProcessOOMKill: true`) lief `ums-ldap-server-primary`
+sofort stabil: tatsaechlicher Speicherbedarf liegt bei ~86 MB (!) statt der zuvor gemessenen 40GB+.
+Bestaetigt der urspruenglichen Vermutung: der "hohe Speicherbedarf" war nie real, sondern ein
+Kill-Artefakt der cgroup-v2-Policy.
+
+```
+## kubeadm-config.yaml (Auszug) - vor "kubeadm init" setzen, gilt dann automatisch
+## fuer alle spaeter beitretenden Nodes (aus der kubelet-config ConfigMap)
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+singleProcessOOMKill: true
+```
+
+**Praktische Konsequenz:** Fuer openDesk (bzw. jeden anderen LMDB/mmap-lastigen Workload) auf
+Kubernetes >= 1.28 mit cgroup v2 ist ein Managed-Kubernetes-Anbieter, der keine Kubelet-Config
+erlaubt (wie DOKS), ungeeignet - zumindest ohne diesen Fix upstream im Chart/Image. Alternativen:
+selbstverwalteter Cluster (kubeadm/kubespray, wie hier), oder ein Managed-Angebot, das
+Kubelet-Extra-Args/-Config zulaesst.
+
+#### `helmfile apply` erneut ausfuehren startet Job-Hooks (z.B. Schema-Ladejobs) neu
+
+Jobs, die als Helm-Hooks definiert sind (z.B. `ums-stack-data-ums`, `ums-provisioning-register-
+consumers`, `ums-keycloak-bootstrap`), laufen bei **jedem** `helmfile apply` erneut, sobald der
+zugehoerige Release ein Diff hat (auch ein voellig harmloses, wie ein Secret-Rotationswert). Das
+kann fuer ein paar Minuten kurzzeitig 401/503-Fehler bei abhaengigen Consumern verursachen (z.B.
+`ums-portal-frontend`, `ums-provisioning-udm-transformer`, `ox-connector`), bis die Hooks
+durchgelaufen sind und die Subscriptions neu registriert wurden. Kein Bug, nur bei einem erneuten
+`helmfile apply` auf ein bereits laufendes System zu beachten - i.d.R. loest es sich innerhalb
+weniger Minuten von selbst; falls nicht, betroffene Pods einmal `kubectl delete pod` neu starten.
+
+#### Geloeschte PVCs haengen in `Terminating`
+
+Auf DigitalOcean kann das automatische Detachen eines Block-Storage-Volumes vom Node mehrere
+Minuten dauern oder haengen bleiben. Kein K8s-Fehler, sondern eine asynchrone Cloud-Operation.
+Falls es nach 5+ Minuten immer noch haengt: Volume manuell per `doctl` detachen, dann die
+`VolumeAttachment`-Objekte in Kubernetes loeschen.
+
+```
+doctl compute volume-action detach <volume-id> <droplet-id>
+kubectl delete volumeattachment <name>
+```
+
+### Fazit
+
+Ein Helmfile-Deployment dieser Groessenordnung (35+ Charts, SSO/LDAP/Datenbanken) ist deutlich
+komplexer als ein einzelnes `helm install` und bringt eigene Fehlerklassen mit sich: Job-Hook-
+State bei Retries, Cross-Pod-Volume-Affinity und - am aufwendigsten zu diagnostizieren -
+Kubernetes-Plattform-Verhalten (cgroup v2 OOM-Handling), das mit bestimmten Workloads
+(memory-mapped I/O wie LMDB) kollidiert.
+
+Auf einem DigitalOcean-Managed-Kubernetes-Cluster (DOKS) blieb der LDAP-Server trotz umfangreicher
+Diagnose (Ressourcen, PVCs, Node-Affinity, Chart-Versionen) instabil, weil DOKS als Managed-Service
+keinen Zugriff auf die Kubelet-Konfiguration erlaubt. Der Wechsel auf einen selbstverwalteten
+kubeadm-Cluster (3 Droplets, `singleProcessOOMKill: true`) - genau der Weg, gegen den openDesk
+selbst testet (kubespray-basiert) - hat das Problem sofort behoben.
+
+**Praxis-Lehre:** Bei mysterioesen OOM-Kills mit scheinbar absurd hohem, nicht plateauendem
+Speicherbedarf lohnt sich der Blick auf die cgroup-v2-OOM-Policy des Clusters, bevor man Limits
+immer weiter hochdreht - insbesondere bei Workloads mit memory-mapped I/O (LMDB, RocksDB, u.ae.)
+und auf Managed-Kubernetes-Angeboten ohne Kubelet-Zugriff.
+
+Fuer ein Trainings-Lab ohne diesen Anspruch lohnt sich ggf. trotzdem der Blick auf die
+leichtgewichtigeren Alternativen (K3s-Guide, SCS-Dokumentation von openDesk).
+
+**Endergebnis:** Auf dem kubeadm-Cluster laeuft openDesk (26 Helm-Releases, kein einziger dauerhaft
+fehlgeschlagen) stabil, das Portal ist unter der konfigurierten Domain per HTTPS mit gueltigem
+Let's-Encrypt-Zertifikat erreichbar, `ums-ldap-server-primary` blieb ueber Stunden durchgehend
+`Ready` ohne einen einzigen Neustart.
 
 ## helm - Dokumentation
 
