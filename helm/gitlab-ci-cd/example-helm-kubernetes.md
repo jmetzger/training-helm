@@ -1,19 +1,23 @@
 # Example gitlab ci-cd pipeline Kubernetes 
 
-## Step 1: Create gitlab - repo and pipeline 
+## Step 1: Import gitlab - repo and pipeline 
 
 ```
-1. Create new repo on gitlab 
-2. Click on pipeline Editor and creat .gitlab-ci.yml with Button 
+1. Create new repo on gitlab -> do import
+https://gitlab.com/jmetzger/training-helm-chart-kubernetes-gitlab-ci-cd.git
+ 
 
 ```
 
-## Step 2: Push your helm chart files to repo 
+## Step 2: in .gitlab-ci.yaml
 
+```
+von ---_>
+APP_NAME: my-first-app
 
-   * Now looks like this
-
-![image](https://github.com/user-attachments/assets/5e88593b-5b31-4adf-a2bb-e5e9a5129be5)
+in ----->
+APP_NAME: my-first-app<namenskuerzel>
+```
 
 ## Step 3: Add your KUBECONFIG as Variable (type: File) to Variables 
 
@@ -33,7 +37,26 @@ variables:
 deploy:
   stage: deploy
   image: 
-    name: alpine/helm:3.2.1
+    name: alpine/stages:          # List of stages for jobs, and their order of execution
+  - deploy
+
+variables:
+  APP_NAME: my-first-app
+
+deploy:
+  stage: deploy
+  image: 
+    name: alpine/k8s:1.31.13
+# Important to unset entrypoint 
+    entrypoint: [""]
+  script:
+    - ls -la
+    - cd; mkdir .kube; cd .kube; cat $KUBECONFIG_SECRET > config; ls -la;
+    - cd $CI_PROJECT_DIR; helm upgrade ${APP_NAME} ./charts/my-app --install --namespace ${APP_NAME} --create-namespace -f ./config/values.yaml
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: always
+
 # Important to unset entrypoint 
     entrypoint: [""]
   script:
