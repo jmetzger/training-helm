@@ -2,7 +2,7 @@
 
 ## Schaubild 
 
-![Kubernetes Architecture - src: syseleven](https://www.syseleven.de/wp-content/uploads/2020/11/syseleven-webiste-loesungen-kubernetes-modell-800x400-web.jpg)
+![image](https://github.com/user-attachments/assets/f4de7c54-33a8-46e5-916c-1119575b1aed)
 
 ## Komponenten / Grundbegriffe
 
