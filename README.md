@@ -27,7 +27,7 @@
      * [Wichtig: Helm Spickzettel](helm/spickzettel.md)
 
   1. Arbeiten mit helm - charts
-     * [Installation, Upgrade, Uninstall helm-Chart exercise](helm/commands/install.md)
+     * [Installation, Upgrade, Uninstall helm-Chart exercise - simple (mariadb-cloudpirates)](helm/exercises/install/mariadb-cloudpirates.md)
      * [Nur fertiges manifest ausgeben ohne Installation](helm/commands/template.md)
      * [Informationen aus nicht installierten Helm-Charts bekommen](helm/commands/show.md)
      * [Chart runterladen und evtl. entpacken und bestimmte Version](/helm/commands/pull.md)
