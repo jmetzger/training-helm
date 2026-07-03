@@ -19,7 +19,7 @@ Referenz fuer aehnliche Helmfile-basierte Multi-Chart-Deployments.
 | Helmfile | >= 1.0.0 | |
 | Helm Diff Plugin | >= 3.11.0 | `helm plugin install` |
 | yq | >= 4.52.4 | |
-| Ingress Controller | ingress-nginx oder haproxy-ingress.github.io | openDesk >= 1.13 nutzt haproxy als Default |
+| Ingress Controller | haproxy-ingress.github.io (Default seit openDesk >= 1.13) | ingress-nginx geht technisch auch (Override noetig), ist aber upstream deprecated und nicht mehr der getestete Pfad |
 | cert-manager | mit CRDs | fuer Zertifikate |
 | Volume Provisioner | ReadWriteOnce (min.) | z.B. `do-block-storage` |
 
@@ -30,9 +30,11 @@ In der Praxis (siehe Troubleshooting unten) sollte man deutlich mehr RAM einplan
 
 ### Schritt 1: Ingress-Controller und cert-manager installieren
 
-openDesk >= v1.13 verwendet standardmaessig `ingressClassName: haproxy` (nginx-ingress gilt als
-deprecated). Wenn man bei nginx bleiben will, muss man das explizit in einer eigenen
-Environment-Values-Datei setzen (siehe Schritt 3).
+openDesk >= v1.13 verwendet standardmaessig `ingressClassName: haproxy` - das sollte man auch so
+lassen, nicht auf ingress-nginx umsteigen. Ingress-nginx laesst sich zwar technisch per Override
+anbinden (Erfahrung aus der Praxis: DNS, Zertifikate und Routing funktionieren grundsaetzlich
+auch damit), es ist aber upstream deprecated und **nicht der von openDesk getestete Pfad** - man
+weicht damit unnoetig vom Standard-Setup ab, ohne einen echten Vorteil zu haben.
 
 ```
 helm repo add haproxy-ingress https://haproxy-ingress.github.io/charts
@@ -90,15 +92,9 @@ git checkout v1.16.1
 ```
 
 Eigene Einstellungen kommen als `.yaml.gotmpl`-Dateien in `helmfile/environments/dev/` (nicht
-die Default-Dateien in `helmfile/environments/default/` anfassen). Beispiel, um bei nginx statt
-haproxy zu bleiben:
-
-```
-# helmfile/environments/dev/ingress-override.yaml.gotmpl
-ingress:
-  ingressClassName: "nginx"
-  controller: "nginx"
-```
+die Default-Dateien in `helmfile/environments/default/` anfassen) - z.B. fuer
+Ressourcen-Anpassungen (siehe Troubleshooting). Der Ingress muss dafuer nicht angefasst werden,
+da `haproxy` bereits Default ist.
 
 ### Schritt 4: Deployen
 
@@ -146,16 +142,28 @@ Fix: ConfigMap loeschen und erneut `helmfile apply` ausfuehren.
 kubectl -n opendesk delete configmap migrations-status
 ```
 
-### `ums-ldap-server-primary` crasht mit OOMKilled
+### `ums-ldap-server-primary` crasht mit OOMKilled (ungeloest auf DOKS)
 
 Der Nubus-LDAP-Server (Univention-basiert, Chart `nubus`) kann beim Start extrem viel Speicher
-allozieren (in einem Test: ueber 11 GB in unter 3 Sekunden), unabhaengig vom gesetzten Memory-
-Limit (getestet bis 15Gi). Weder frische PVCs noch ein kompletter `helm uninstall`/Neuinstall
-des `nubus`-Release behoben es zuverlaessig in unserem Setup (DOKS 1.35.5, sehr neue Kernel-
-Version). Das deutet auf eine Inkompatibilitaet zwischen genau dieser Chart-/Image-Version und
-der Kubernetes-/Kernel-Kombination hin, nicht auf einen simplen Konfigurationsfehler.
+allozieren - in einem Test: Wachstum von ~100MB auf ueber 11 GB in unter 3 Sekunden, live per
+`kubectl exec ... cat /sys/fs/cgroup/memory.current` verfolgt. Der Standard-Wert des Charts
+(`nubusDevelopmentResources`) liegt bei nur 1Gi Limit; Univention selbst nennt fuer Produktion
+2048Mi als Default - der Hersteller geht also nicht von einem hohen Speicherbedarf aus.
 
-Ein echter (und notwendiger) Bug wurde dabei trotzdem gefunden: `ums-ldap-notifier` und
+Folgende Ursachen wurden systematisch ausgeschlossen:
+
+- **Zu wenig RAM:** Getestet mit Limits von 1Gi bis 40Gi (dedizierter `m-8vcpu-64gb`-Node) - das
+  Wachstum floppt bei keiner Grenze ab, sondern waechst kontinuierlich weiter (live gemessen:
+  24GB -> 38GB in ~30 Sekunden), bis es die jeweilige Grenze erreicht und gekillt wird. Kein
+  einmaliger Init-Peak, der irgendwann plateaut.
+- **Alte/korrupte Daten:** Frische, leere PVCs (nach komplettem `helm uninstall` inkl.
+  PVC-Loeschung) zeigen dasselbe Verhalten. Die eigentlichen LDAP-Datenverzeichnisse
+  (`/var/lib/univention-ldap/ldap/`) blieben ueber alle Versuche hinweg leer, der Translog wuchs
+  nie ueber 32KB - das Problem haengt nicht von angesammeltem Datenvolumen ab.
+- **Chart-/openDesk-Versions-Regression:** Mit openDesk v1.16.1 (nubus 1.20.1) UND v1.14.3
+  (nubus 1.19.1) reproduziert - identisches Verhalten in zwei unabhaengigen Versionskombinationen.
+
+Ein echter (und notwendiger) Bug wurde nebenbei trotzdem gefunden: `ums-ldap-notifier` und
 `ums-ldap-server-primary` teilen sich ein RWO-Volume und muessen daher zwingend auf demselben
 Node laufen (der Chart definiert dafuer eine `podAffinity`). Wird der `ldap-server-primary`-Pod
 manuell neu gestartet (z.B. `kubectl delete pod`), kann der Scheduler ihn auf einen anderen Node
@@ -167,9 +175,14 @@ Required-Affinity wieder neben dem Primary einordnet.
 kubectl -n opendesk delete pod ums-ldap-notifier-0
 ```
 
-Wenn danach weiterhin OOMKilled auftritt: naechster Schritt waere ein Test mit einer aelteren,
-etablierteren Kubernetes-Minor-Version (z.B. 1.33.x statt 1.35.x) oder einer aelteren
-openDesk-Version, um die Kombination einzugrenzen. Noch nicht final geloest.
+**Verdacht:** Ein Kubernetes-cgroup-v2-Verhalten (`memory.oom.group`, seit K8s 1.28 aktiv;
+Kubelet-Flag `singleProcessOOMKill` seit 1.32 verfuegbar, Default aber weiterhin "ganzen
+Container killen") in Kombination mit LMDB's memory-mapped I/O kann bei kurzen Speicherspitzen
+zu vorzeitigen Kills fuehren - dagegen spricht aber das kontinuierliche (nicht abflachende)
+Wachstum bis 40GB. Da DOKS als Managed-Service das Kubelet nicht konfigurierbar macht, laesst
+sich das auf DOKS nicht gegentesten. Naechster Schritt: Reproduktion auf einem selbstverwalteten
+kubeadm-Cluster (der von openDesk selbst getestete, kubespray-basierte Weg), wo
+`singleProcessOOMKill: true` gesetzt werden kann. **Stand jetzt: ungeloest.**
 
 ### Geloeschte PVCs haengen in `Terminating`
 
@@ -187,7 +200,14 @@ kubectl delete volumeattachment <name>
 
 Ein Helmfile-Deployment dieser Groessenordnung (35+ Charts, SSO/LDAP/Datenbanken) ist deutlich
 komplexer als ein einzelnes `helm install` und bringt eigene Fehlerklassen mit sich: Job-Hook-
-State bei Retries, Cross-Pod-Volume-Affinity, und - wie hier beobachtet - potenziell chart-
-spezifische Ressourcenprobleme, die sich nicht durch simples Hochsetzen von Limits loesen lassen.
-Fuer ein Trainings-Lab lohnt sich ggf. der Blick auf die leichtgewichtigeren Alternativen
-(K3s-Guide, SCS-Dokumentation von openDesk).
+State bei Retries, Cross-Pod-Volume-Affinity, und - wie hier beobachtet - ein bislang ungeloestes
+Speicherproblem im LDAP-Server, das sich nicht durch simples Hochsetzen von Limits loesen laesst.
+
+Auf einem DigitalOcean-Managed-Kubernetes-Cluster (DOKS) blieb der LDAP-Server trotz umfangreicher
+Diagnose (Ressourcen, PVCs, Node-Affinity, Chart-Versionen) instabil. Da openDesk selbst gegen
+selbstverwaltete kubespray-Cluster getestet wird und DOKS als Managed-Service keinen Zugriff auf
+Kubelet-Konfiguration erlaubt, ist der naechste Schritt ein eigener kubeadm-Cluster auf Droplets -
+siehe Fortsetzung (falls vorhanden) oder Commit-History dieses Dokuments.
+
+Fuer ein Trainings-Lab ohne diesen Anspruch lohnt sich ggf. der Blick auf die leichtgewichtigeren
+Alternativen (K3s-Guide, SCS-Dokumentation von openDesk).
