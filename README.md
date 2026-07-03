@@ -57,7 +57,10 @@
 
   1. Metrics - Server
      * [Metrics - Server mit helm installieren und verwenden](/helm/metrics-server.md)
-    
+
+  1. Helmfile
+     * [Praxisbeispiel: openDesk mit Helmfile ausrollen](helm/helmfile/opendesk-mit-helmfile.md)
+
   1. helm - Dokumentation
      * [Helm Documentation](https://helm.sh/docs/)
 
