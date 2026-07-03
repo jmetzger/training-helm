@@ -30,6 +30,11 @@ pizzaToppings:
 ## Step 2 (Version 1):
 
 ```
+cd templates
+nano cm.yaml
+```
+
+```
 # nano cm.yaml 
 apiVersion: v1
 kind: ConfigMap
