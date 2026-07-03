@@ -7,14 +7,17 @@ Nextcloud, OX App Suite, OpenProject, XWiki, Element/Synapse, Jitsi, Collabora, 
 Mailstack, Datenbanken, ...), orchestriert ueber [Helmfile](https://helmfile.readthedocs.io/).
 Kein `helm install opendesk` - stattdessen `helmfile apply -e <environment> -n <namespace>`.
 
-Dieses Dokument beschreibt den Rollout auf einem frischen DOKS-Cluster (DigitalOcean) als
-Referenz fuer aehnliche Helmfile-basierte Multi-Chart-Deployments.
+Dieses Dokument beschreibt den Rollout auf DigitalOcean als Referenz fuer aehnliche
+Helmfile-basierte Multi-Chart-Deployments. **Ergebnis vorweg:** Auf einem Managed-Cluster (DOKS)
+blieb der LDAP-Server (siehe Troubleshooting) instabil - der erfolgreiche, stabile Rollout lief
+am Ende auf einem selbstverwalteten 3-Node-kubeadm-Cluster (Kubernetes 1.32.13 auf Ubuntu-24.04-
+Droplets). Grund und Fix sind unten dokumentiert.
 
 ## Voraussetzungen
 
 | Tool | Version | Hinweis |
 |---|---|---|
-| Kubernetes | >= 1.24, CNCF-zertifiziert | getestet mit 1.35.5 (DOKS) |
+| Kubernetes | >= 1.24, CNCF-zertifiziert | getestet mit 1.35.5 (DOKS, LDAP instabil) und 1.32.13 (kubeadm, stabil - siehe Troubleshooting) |
 | Helm | >= 3.17.3, NICHT 3.18.0 / 3.20.1 | bekannte Helm-Bugs in diesen Versionen |
 | Helmfile | >= 1.0.0 | |
 | Helm Diff Plugin | >= 3.11.0 | `helm plugin install` |
@@ -204,6 +207,17 @@ erlaubt (wie DOKS), ungeeignet - zumindest ohne diesen Fix upstream im Chart/Ima
 selbstverwalteter Cluster (kubeadm/kubespray, wie hier), oder ein Managed-Angebot, das
 Kubelet-Extra-Args/-Config zulaesst.
 
+### `helmfile apply` erneut ausfuehren startet Job-Hooks (z.B. Schema-Ladejobs) neu
+
+Jobs, die als Helm-Hooks definiert sind (z.B. `ums-stack-data-ums`, `ums-provisioning-register-
+consumers`, `ums-keycloak-bootstrap`), laufen bei **jedem** `helmfile apply` erneut, sobald der
+zugehoerige Release ein Diff hat (auch ein voellig harmloses, wie ein Secret-Rotationswert). Das
+kann fuer ein paar Minuten kurzzeitig 401/503-Fehler bei abhaengigen Consumern verursachen (z.B.
+`ums-portal-frontend`, `ums-provisioning-udm-transformer`, `ox-connector`), bis die Hooks
+durchgelaufen sind und die Subscriptions neu registriert wurden. Kein Bug, nur bei einem erneuten
+`helmfile apply` auf ein bereits laufendes System zu beachten - i.d.R. loest es sich innerhalb
+weniger Minuten von selbst; falls nicht, betroffene Pods einmal `kubectl delete pod` neu starten.
+
 ### Geloeschte PVCs haengen in `Terminating`
 
 Auf DigitalOcean kann das automatische Detachen eines Block-Storage-Volumes vom Node mehrere
@@ -237,3 +251,8 @@ und auf Managed-Kubernetes-Angeboten ohne Kubelet-Zugriff.
 
 Fuer ein Trainings-Lab ohne diesen Anspruch lohnt sich ggf. trotzdem der Blick auf die
 leichtgewichtigeren Alternativen (K3s-Guide, SCS-Dokumentation von openDesk).
+
+**Endergebnis:** Auf dem kubeadm-Cluster laeuft openDesk (26 Helm-Releases, kein einziger dauerhaft
+fehlgeschlagen) stabil, das Portal ist unter der konfigurierten Domain per HTTPS mit gueltigem
+Let's-Encrypt-Zertifikat erreichbar, `ums-ldap-server-primary` blieb ueber Stunden durchgehend
+`Ready` ohne einen einzigen Neustart.
